@@ -13,33 +13,36 @@ const LINE_HEADER = {
 };
 
 interface ReplyNotification {
-    resUser          : {
+    resUser: {
         users_related_borrow: string;
-        users_fname         : string;
-        users_sname         : string;
-        users_tel1          : string;
-        users_line_id       : string;
+        users_fname: string;
+        users_sname: string;
+        users_tel1: string;
+        users_line_id: string;
     };
     resTakecareperson: {
         takecare_fname: string;
         takecare_sname: string;
-        takecare_tel1 : string;
-        takecare_id   : number;
+        takecare_tel1: string;
+        takecare_id: number;
     };
-    resSafezone      : any;
-    extendedHelpId   : number;
-    locationData : {
-        locat_latitude : string;
+    resSafezone: {};
+    extendedHelpId: number;
+    locationData: {
+        locat_latitude: string;
         locat_longitude: string;
     };
 }
 
 interface ReplyNoti {
-    replyToken : string;
-    message    : string;
+    replyToken: string;
+    message: string;
     userIdAccept: string;
     title?: string;
+    titleColor?: string;
     buttons?: ReplyNotiButton[];
+    buttonRows?: ReplyNotiButton[][];
+    detailRows?: ReplyNotiDetailRow[];
 }
 
 interface ReplyNotiButton {
@@ -48,6 +51,27 @@ interface ReplyNotiButton {
     data?: string;
     uri?: string;
     text?: string;
+}
+
+interface ReplyNotiDetailRow {
+    label: string;
+    value: string;
+}
+
+interface ReplySafezoneBackMessage {
+    resUser: {
+        users_fname: string;
+        users_sname: string;
+        users_tel1: string;
+        users_line_id: string;
+    };
+    resTakecareperson: {
+        takecare_fname: string;
+        takecare_sname: string;
+        takecare_tel1: string;
+        takecare_id: number;
+    };
+    extenId: number;
 }
 
 export const getUserProfile = async (userId: string) => {
@@ -85,7 +109,7 @@ const layoutBoxBaseline = (label: string, text: string, flex1 = 2, flex2 = 5) =>
     }
 }
 
-const header1 = (title = "แจ้งเตือนช่วยเหลือเพิ่มเติม") =>  {
+const header1 = (title = "แจ้งเตือนช่วยเหลือเพิ่มเติม") => {
     const h1 = {
         type: "text",
         text: title,
@@ -115,7 +139,6 @@ export const replyNotification = async ({
     locationData,
 }: ReplyNotification) => {
     try {
-        // ดึงพิกัดจาก location
         const latitude = Number(locationData.locat_latitude);
         const longitude = Number(locationData.locat_longitude);
 
@@ -199,25 +222,14 @@ export const replyNotification = async ({
                                     {
                                         type: 'button',
                                         style: 'primary',
+                                        color: '#777777',
                                         height: 'sm',
                                         margin: 'xxl',
                                         action: {
                                             type: 'postback',
-                                            label: 'ตอบรับเคสช่วยเหลือ',
+                                            label: 'รับเคสช่วยเหลือ',
                                             data: `type=accept&takecareId=${resTakecareperson.takecare_id}&extenId=${extendedHelpId}&userLineId=${resUser.users_line_id}`,
                                         },
-                                    },
-                                    {
-                                        type: 'button',
-                                        style: 'secondary',
-                                        height: 'sm',
-                                        margin: 'xxl',
-                                        color: '#007AFF',
-                                        action: {
-                                            type: 'uri',
-                                            label: 'ดูแผนที่/นำทาง',
-                                            uri: `${process.env.WEB_DOMAIN}/location?idlocation=${extendedHelpId}&idsafezone=${resSafezone?.safezone_id || ''}&auToken=${resUser.users_line_id}`
-                                        }
                                     },
                                     {
                                         type: 'button',
@@ -273,12 +285,22 @@ export const replyNoti = async ({
     userIdAccept,
     message,
     title,
+    titleColor,
     buttons = [],
+    buttonRows = [],
+    detailRows = [],
 }: ReplyNoti) => {
     try {
         const profile = await getUserProfile(userIdAccept);
         const displayName = profile?.displayName || 'ผู้ใช้งาน';
         const messageText = message || 'ไม่มีข้อความ';
+        const mapButtonAction = (b: ReplyNotiButton) =>
+            b.type === "postback"
+                ? { type: "postback", label: b.label, data: b.data || "" }
+                : b.type === "uri"
+                    ? { type: "uri", label: b.label, uri: b.uri || "" }
+                    : { type: "message", label: b.label, text: b.text || "" };
+
 
         const requestData = {
             to: replyToken,
@@ -292,35 +314,92 @@ export const replyNoti = async ({
                             type: "box",
                             layout: "vertical",
                             contents: [
-                                header1(title)[0],
-                                header1(title)[1],
                                 {
                                     type: "text",
-                                    text: `คุณ ${displayName}`,
+                                    text: title || "แจ้งเตือนช่วยเหลือเพิ่มเติม",
+                                    contents: [
+                                        {
+                                            type: "span",
+                                            text: title || "แจ้งเตือนช่วยเหลือเพิ่มเติม",
+                                            color: titleColor || "#FC0303",
+                                            size: "xl",
+                                            weight: "bold",
+                                            decoration: "none",
+                                        }
+                                    ]
+                                },
+                                {
+                                    type: "separator",
+                                    margin: "md"
+                                },
+                                {
+                                    type: "text",
+                                    text: detailRows.length ? messageText : `คุณ ${displayName}`,
                                     wrap: true,
                                     margin: "md",
                                     color: "#555555",
                                     size: "md"
                                 },
-                                {
-                                    type: "text",
-                                    text: messageText,
-                                    wrap: true,
-                                    margin: "md",
-                                    color: "#555555",
-                                    size: "md"
-                                },
+                                ...(detailRows.length
+                                    ? [{
+                                        type: "box",
+                                        layout: "vertical",
+                                        margin: "md",
+                                        spacing: "sm",
+                                        contents: detailRows.map((row) => ({
+                                            type: "box",
+                                            layout: "baseline",
+                                            contents: [
+                                                {
+                                                    type: "text",
+                                                    text: row.label,
+                                                    color: "#AAAAAA",
+                                                    size: "sm",
+                                                    flex: 3,
+                                                    wrap: true,
+                                                },
+                                                {
+                                                    type: "text",
+                                                    text: row.value || "-",
+                                                    color: "#111111",
+                                                    size: "sm",
+                                                    flex: 5,
+                                                    wrap: true,
+                                                    weight: "bold",
+                                                },
+                                            ],
+                                        })),
+                                    }]
+                                    : [{
+                                        type: "text",
+                                        text: messageText,
+                                        wrap: true,
+                                        margin: "md",
+                                        color: "#555555",
+                                        size: "md"
+                                    }]
+                                ),
                                 ...buttons.map((b) => ({
                                     type: "button",
                                     style: "primary",
+                                    color: '#777777',
                                     height: "sm",
                                     margin: "md",
-                                    action:
-                                        b.type === "postback"
-                                            ? { type: "postback", label: b.label, data: b.data || "" }
-                                            : b.type === "uri"
-                                                ? { type: "uri", label: b.label, uri: b.uri || "" }
-                                                : { type: "message", label: b.label, text: b.text || "" },
+                                    action: mapButtonAction(b),
+                                })),
+                                ...buttonRows.map((row) => ({
+                                    type: "box",
+                                    layout: "horizontal",
+                                    margin: "md",
+                                    spacing: "sm",
+                                    contents: row.slice(0, 2).map((b) => ({
+                                        type: "button",
+                                        flex: 1,
+                                        style: "primary",
+                                        color: "#777777",
+                                        height: "sm",
+                                        action: mapButtonAction(b),
+                                    })),
                                 })),
                             ]
                         }
@@ -333,6 +412,140 @@ export const replyNoti = async ({
         console.log('✅ Reply notification sent successfully to:', replyToken);
     } catch (error: any) {
         console.log("❌ REPLY NOTI ERROR", error?.response?.status, error?.response?.data, error?.message);
+        throw error;
+    }
+}
+
+export const replySafezoneBackMessage = async ({
+    resUser,
+    resTakecareperson,
+    extenId,
+}: ReplySafezoneBackMessage) => {
+    try {
+        // ค้นหากลุ่มที่เปิดใช้งานจากฐานข้อมูล
+        const groupLine = await prisma.groupLine.findFirst({
+            where: {
+                group_status: 1,
+            },
+        });
+
+        if (groupLine) {
+            const groupLineId = groupLine.group_line_id;
+
+            // ตรวจสอบและทำความสะอาดข้อมูล
+            const userFullName = `${resUser.users_fname || ''} ${resUser.users_sname || ''}`.trim() || 'ไม่ระบุชื่อ';
+            const userTel = resUser.users_tel1 || '0000000000';
+            const takecareFullName = `${resTakecareperson.takecare_fname || ''} ${resTakecareperson.takecare_sname || ''}`.trim() || 'ไม่ระบุชื่อ';
+            const takecareTel = resTakecareperson.takecare_tel1 || '-';
+            const liffAcceptCallUrl = `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` +
+                `?extenId=${encodeURIComponent(String(extenId))}` +
+                `&takecareId=${encodeURIComponent(String(resTakecareperson.takecare_id))}` +
+                `&userLineId=${encodeURIComponent(resUser.users_line_id)}` +
+                `&groupId=${encodeURIComponent(groupLineId)}` +
+                `&tel=${encodeURIComponent(userTel)}`;
+
+            const requestData = {
+                to: groupLineId,
+                messages: [
+                    {
+                        type: 'flex',
+                        altText: 'แจ้งเตือนกลับเข้าเขต',
+                        contents: {
+                            type: 'bubble',
+                            body: {
+                                type: 'box',
+                                layout: 'vertical',
+                                contents: [
+                                    {
+                                        type: 'text',
+                                        text: 'แจ้งเตือนกลับเข้าเขต',
+                                        contents: [
+                                            {
+                                                type: 'span',
+                                                text: 'แจ้งเตือนกลับเข้าเขต',
+                                                color: '#000000',
+                                                size: 'xl',
+                                                weight: 'bold',
+                                                decoration: 'none'
+                                            }
+                                        ],
+                                        align: 'center'
+                                    },
+                                    {
+                                        type: 'separator',
+                                        margin: 'md'
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: 'ข้อมูลผู้มีภาวะพึ่งพิง',
+                                        size: 'md',
+                                        color: '#555555',
+                                        wrap: true,
+                                        margin: 'sm',
+                                    },
+                                    {
+                                        type: 'box',
+                                        layout: 'vertical',
+                                        margin: 'md',
+                                        spacing: 'sm',
+                                        contents: [
+                                            layoutBoxBaseline('ชื่อ-สกุล', takecareFullName, 4, 5),
+                                            layoutBoxBaseline('เบอร์โทร', takecareTel, 4, 5),
+                                        ],
+                                    },
+                                    {
+                                        type: 'separator',
+                                        margin: 'md'
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: 'ผู้มีภาวะพึ่งพิงได้กลับเข้าเขตปลอดภัยแล้ว',
+                                        size: 'xl',
+                                        color: '#2CD435',
+                                        weight: 'bold',
+                                        wrap: true,
+                                        margin: 'xl',
+                                        align: 'center'
+                                    },
+                                    {
+                                        type: 'separator',
+                                        margin: 'md'
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: '*กรุณาโทรตรวจสอบกับผู้ดูแล',
+                                        size: 'xs',
+                                        color: '#555555',
+                                        wrap: true,
+                                        margin: 'md',
+                                    },
+                                    {
+                                        type: 'button',
+                                        style: 'primary',
+                                        height: 'sm',
+                                        margin: 'lg',
+                                        color: '#ff0000',
+                                        action: {
+                                            type: 'uri',
+                                            label: 'รับเคสและโทร',
+                                            uri: liffAcceptCallUrl
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                ],
+            };
+
+            // ส่งข้อความไปยังกลุ่ม
+            await axios.post(LINE_PUSH_MESSAGING_API, requestData, { headers: LINE_HEADER });
+            console.log('✅ Safezone back message sent successfully to group:', groupLineId);
+        } else {
+            console.log('❌ ไม่พบกลุ่มไลน์ที่ต้องการส่งข้อความไป');
+        }
+    } catch (error: any) {
+        console.log("❌ SAFEZONE BACK MESSAGE ERROR", error?.response?.status, error?.response?.data, error?.message);
         throw error;
     }
 }
